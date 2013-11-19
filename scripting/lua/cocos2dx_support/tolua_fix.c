@@ -128,9 +128,9 @@ TOLUA_API int toluafix_remove_ccobject_by_refid(lua_State* L, int refid)
         lua_pop(L, 3);
         return -3;
     }
-    
+
     // cleanup peertable
-    lua_pushvalue(L, TOLUA_NOPEER);
+    lua_pushvalue(L, LUA_REGISTRYINDEX);
     lua_setfenv(L, -2);
 
     ud = (void**)lua_touserdata(L, -1);

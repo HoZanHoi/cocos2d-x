@@ -1,7 +1,6 @@
 #include "ArmatureScene.h"
 #include "../../testResource.h"
 
-
 using namespace cocos2d;
 using namespace cocos2d::extension;
 
@@ -20,6 +19,9 @@ CCLayer *CreateLayer(int index)
     case TEST_ASYNCHRONOUS_LOADING:
         pLayer = new TestAsynchronousLoading();
         break;
+    case TEST_DIRECT_LOADING:
+        pLayer = new TestDirectLoading();
+        break;
     case TEST_DRAGON_BONES_2_0:
         pLayer = new TestDragonBones20();
         break;
@@ -29,11 +31,17 @@ CCLayer *CreateLayer(int index)
     case TEST_PERFORMANCE:
         pLayer = new TestPerformance();
         break;
+    case TEST_PERFORMANCE_BATCHNODE:
+        pLayer = new TestPerformanceBatchNode();
+        break;
     case TEST_CHANGE_ZORDER:
         pLayer = new TestChangeZorder();
         break;
     case TEST_ANIMATION_EVENT:
         pLayer = new TestAnimationEvent();
+        break;
+    case TEST_FRAME_EVENT:
+        pLayer = new TestFrameEvent();
         break;
     case  TEST_PARTICLE_DISPLAY:
         pLayer = new TestParticleDisplay();
@@ -52,6 +60,9 @@ CCLayer *CreateLayer(int index)
         break;
     case TEST_ARMATURE_NESTING:
         pLayer = new TestArmatureNesting();
+        break;
+    case TEST_ARMATURE_NESTING_2:
+        pLayer = new TestArmatureNesting2();
         break;
     default:
         break;
@@ -110,8 +121,6 @@ ArmatureTestScene::ArmatureTestScene(bool bPortrait)
 }
 void ArmatureTestScene::runThisTest()
 {
-
-
     s_nActionIdx = -1;
     addChild(NextTest());
 
@@ -232,6 +241,10 @@ void TestAsynchronousLoading::onEnter()
     CCArmatureDataManager::sharedArmatureDataManager()->addArmatureFileInfoAsync("armature/cyborg.png", "armature/cyborg.plist", "armature/cyborg.xml", this, schedule_selector(TestAsynchronousLoading::dataLoaded));
     CCArmatureDataManager::sharedArmatureDataManager()->addArmatureFileInfoAsync("armature/Dragon.png", "armature/Dragon.plist", "armature/Dragon.xml", this, schedule_selector(TestAsynchronousLoading::dataLoaded));
     CCArmatureDataManager::sharedArmatureDataManager()->addArmatureFileInfoAsync("armature/Cowboy.ExportJson", this, schedule_selector(TestAsynchronousLoading::dataLoaded));
+    CCArmatureDataManager::sharedArmatureDataManager()->addArmatureFileInfoAsync("armature/hero.ExportJson", this, schedule_selector(TestAsynchronousLoading::dataLoaded));
+    CCArmatureDataManager::sharedArmatureDataManager()->addArmatureFileInfoAsync("armature/horse.ExportJson", this, schedule_selector(TestAsynchronousLoading::dataLoaded));
+    CCArmatureDataManager::sharedArmatureDataManager()->addArmatureFileInfoAsync("armature/bear.ExportJson", this, schedule_selector(TestAsynchronousLoading::dataLoaded));
+    CCArmatureDataManager::sharedArmatureDataManager()->addArmatureFileInfoAsync("armature/HeroAnimation.ExportJson", this, schedule_selector(TestAsynchronousLoading::dataLoaded));
 
     //! load data directly
     // 	CCArmatureDataManager::sharedArmatureDataManager()->addArmatureFileInfo("armature/knight.png", "armature/knight.plist", "armature/knight.xml");
@@ -251,6 +264,11 @@ std::string TestAsynchronousLoading::subtitle()
 {
     return "current percent : ";
 }
+void TestAsynchronousLoading::restartCallback(CCObject* pSender)
+{
+    CCArmatureDataManager::sharedArmatureDataManager()->purge();
+    ArmatureTestLayer::restartCallback(pSender);
+}
 void TestAsynchronousLoading::dataLoaded(float percent)
 {
     CCLabelTTF *label = (CCLabelTTF *)getChildByTag(10001);
@@ -267,6 +285,27 @@ void TestAsynchronousLoading::dataLoaded(float percent)
         restartItem->setEnabled(true);
         nextItem->setEnabled(true);
     }
+}
+
+
+void TestDirectLoading::onEnter()
+{
+    ArmatureTestLayer::onEnter();
+
+    // remove sigle resource
+    CCArmatureDataManager::sharedArmatureDataManager()->removeArmatureFileInfo("armature/bear.ExportJson");
+
+    // load resource directly
+    CCArmatureDataManager::sharedArmatureDataManager()->addArmatureFileInfo("armature/bear.ExportJson");
+
+    CCArmature *armature = CCArmature::create("bear");
+    armature->getAnimation()->playByIndex(0);
+    armature->setPosition(ccp(VisibleRect::center().x, VisibleRect::center().y));
+    addChild(armature);
+}
+std::string TestDirectLoading::title()
+{
+    return "Test Direct Loading";
 }
 
 
@@ -311,6 +350,9 @@ std::string TestDragonBones20::title()
 
 
 
+#define ArmaturePerformanceTag 20000
+
+
 TestPerformance::~TestPerformance()
 {
 }
@@ -318,10 +360,23 @@ void TestPerformance::onEnter()
 {
     ArmatureTestLayer::onEnter();
 
+    CCMenuItemFont::setFontSize(65);
+    CCMenuItemFont *decrease = CCMenuItemFont::create(" - ", this, menu_selector(TestPerformance::onDecrease));
+    decrease->setColor(ccc3(0,200,20));
+    CCMenuItemFont *increase = CCMenuItemFont::create(" + ", this, menu_selector(TestPerformance::onIncrease));
+    increase->setColor(ccc3(0,200,20));
+
+    CCMenu *menu = CCMenu::create(decrease, increase, NULL);
+    menu->alignItemsHorizontally();
+    menu->setPosition(ccp(VisibleRect::getVisibleRect().size.width/2, VisibleRect::getVisibleRect().size.height-100));
+    addChild(menu, 10000);
+
     armatureCount = frames = times = lastTimes = 0;
     generated = false;
 
     scheduleUpdate();
+
+    addArmature(100);
 }
 
 std::string TestPerformance::title()
@@ -332,35 +387,76 @@ std::string TestPerformance::subtitle()
 {
     return "Current CCArmature Count : ";
 }
-void TestPerformance::addArmature(cocos2d::extension::CCArmature *armature)
+void TestPerformance::onIncrease(CCObject* pSender)
 {
-    armatureCount++;
-    addChild(armature, armatureCount);
+    addArmature(20);
 }
-void TestPerformance::update(float delta)
+void TestPerformance::onDecrease(CCObject* pSender)
 {
-    frames ++;
-    times += delta;
+    if (armatureCount == 0)
+        return;
 
-    if (frames / times > 58)
+    for (int i = 0; i<20; i++)
     {
+        removeArmatureFromParent(ArmaturePerformanceTag + armatureCount);
+        armatureCount --;
+        refreshTitile();
+    }
+}
+void TestPerformance::addArmature(int number)
+{
+    for (int i = 0; i<number; i++)
+    {
+        armatureCount++;
+
         cocos2d::extension::CCArmature *armature = NULL;
         armature = new cocos2d::extension::CCArmature();
         armature->init("Knight_f/Knight");
         armature->getAnimation()->playByIndex(0);
         armature->setPosition(50 + armatureCount * 2, 150);
         armature->setScale(0.6f);
-        addArmature(armature);
+        addArmatureToParent(armature);
         armature->release();
-
-        char pszCount[255];
-        sprintf(pszCount, "%s %i", subtitle().c_str(), armatureCount);
-        CCLabelTTF *label = (CCLabelTTF *)getChildByTag(10001);
-        label->setString(pszCount);
     }
+
+    refreshTitile();
+}
+void TestPerformance::addArmatureToParent(cocos2d::extension::CCArmature *armature)
+{
+    addChild(armature, 0, ArmaturePerformanceTag + armatureCount);
+}
+void TestPerformance::removeArmatureFromParent(int tag)
+{
+    removeChildByTag(ArmaturePerformanceTag + armatureCount);
+}
+void TestPerformance::refreshTitile()
+{
+    char pszCount[255];
+    sprintf(pszCount, "%s %i", subtitle().c_str(), armatureCount);
+    CCLabelTTF *label = (CCLabelTTF *)getChildByTag(10001);
+    label->setString(pszCount);
 }
 
 
+void TestPerformanceBatchNode::onEnter()
+{
+    batchNode = CCBatchNode::create();
+    addChild(batchNode);
+
+    TestPerformance::onEnter();
+}
+std::string TestPerformanceBatchNode::title()
+{
+    return "Test Performance of using CCBatchNode";
+}
+void TestPerformanceBatchNode::addArmatureToParent(cocos2d::extension::CCArmature *armature)
+{
+    batchNode->addChild(armature, 0, ArmaturePerformanceTag + armatureCount);
+}
+void TestPerformanceBatchNode::removeArmatureFromParent(int tag)
+{
+    batchNode->removeChildByTag(ArmaturePerformanceTag + armatureCount);
+}
 
 
 
@@ -469,6 +565,50 @@ void TestAnimationEvent::callback2()
 }
 
 
+
+#define  FRAME_EVENT_ACTION_TAG 10000
+
+void TestFrameEvent::onEnter()
+{
+    ArmatureTestLayer::onEnter();
+    cocos2d::extension::CCArmature *armature = cocos2d::extension::CCArmature::create("HeroAnimation");
+    armature->getAnimation()->play("attack");
+    armature->getAnimation()->setSpeedScale(0.5);
+    armature->setPosition(ccp(VisibleRect::center().x - 50, VisibleRect::center().y -100));
+
+    /*
+     * Set armature's frame event callback function
+     * To disconnect this event, just setFrameEventCallFunc(NULL, NULL);
+     */
+    armature->getAnimation()->setFrameEventCallFunc(this, frameEvent_selector(TestFrameEvent::onFrameEvent));
+
+    addChild(armature);
+
+    schedule( schedule_selector(TestFrameEvent::checkAction) );
+}
+std::string TestFrameEvent::title()
+{
+    return "Test Frame Event";
+}
+void TestFrameEvent::onFrameEvent(cocos2d::extension::CCBone *bone, const char *evt, int originFrameIndex, int currentFrameIndex)
+{
+    CCLOG("(%s) emit a frame event (%s) at frame index (%d).", bone->getName().c_str(), evt, currentFrameIndex);
+
+
+    if (!this->getActionByTag(FRAME_EVENT_ACTION_TAG) || this->getActionByTag(FRAME_EVENT_ACTION_TAG)->isDone())
+    {
+        this->stopAllActions();
+
+        CCActionInterval *action =  CCShatteredTiles3D::create(0.2f, CCSizeMake(16,12), 5, false); 
+        action->setTag(FRAME_EVENT_ACTION_TAG);
+        this->runAction(action);
+    }
+}
+void TestFrameEvent::checkAction(float dt)
+{
+    if ( this->numberOfRunningActions() == 0 && this->getGrid() != NULL)
+        this->setGrid(NULL);
+}
 
 
 void TestParticleDisplay::onEnter()
@@ -865,17 +1005,12 @@ void TestColliderDetector::initWorld()
 
     bullet->setCPBody(body);
 
-    body = cpBodyNew(INFINITY, INFINITY);
+    body = cpBodyNew(1.0f, INFINITY);
     cpSpaceAddBody(space, body);
     armature2->setBody(body);
 
-    shape = armature2->getShapeList();
-    while(shape)
-    {
-        cpShape *next = shape->next_private;
-        shape->collision_type = eEnemyTag;
-        shape = next;
-    }
+    CCColliderFilter filter = CCColliderFilter(eEnemyTag);
+    armature2->setColliderFilter(&filter);
 
     cpSpaceAddCollisionHandler(space, eEnemyTag, eBulletTag, beginHit, NULL, NULL, endHit, NULL);
 }
@@ -906,7 +1041,7 @@ void TestBoundingBox::draw()
 {
     CC_NODE_DRAW_SETUP();
 
-    rect = CCRectApplyAffineTransform(armature->boundingBox(), armature->nodeToParentTransform());
+    rect = armature->boundingBox();
 
     ccDrawColor4B(100, 100, 100, 255);
     ccDrawRect(rect.origin, ccp(rect.getMaxX(), rect.getMaxY()));
@@ -980,3 +1115,188 @@ void TestArmatureNesting::registerWithTouchDispatcher()
 {
     CCDirector::sharedDirector()->getTouchDispatcher()->addTargetedDelegate(this, INT_MIN + 1, true);
 }
+
+
+
+
+Hero *Hero::create(const char *name)
+{
+    Hero *hero = new Hero();
+    if (hero && hero->init(name))
+    {
+        hero->autorelease();
+        return hero;
+    }
+    CC_SAFE_DELETE(hero);
+    return NULL;
+}
+
+Hero::Hero()
+    : m_pMount(NULL)
+    , m_pLayer(NULL)
+{
+}
+
+void Hero::changeMount(CCArmature *armature)
+{
+    if (armature == NULL)
+    {
+        retain();
+
+        playByIndex(0);
+        //Remove hero from display list
+        m_pMount->getBone("hero")->removeDisplay(0);
+        m_pMount->stopAllActions();
+
+        //Set position to current position
+        setPosition(m_pMount->getPosition());
+        //Add to layer
+        m_pLayer->addChild(this);
+
+        release();
+
+        setMount(armature);
+    }
+    else
+    {
+        setMount(armature);
+
+        retain();
+        //Remove from layer
+        removeFromParentAndCleanup(false);
+
+        //Get the hero bone
+        CCBone *bone = armature->getBone("hero");
+        //Add hero as a display to this bone
+        bone->addDisplay(this, 0);
+        //Change this bone's display
+        bone->changeDisplayByIndex(0, true);
+        bone->setIgnoreMovementBoneData(true);
+
+        setPosition(ccp(0,0));
+        //Change animation
+        playByIndex(1);
+
+        setScale(1);
+
+        release();
+    }
+
+}
+
+void Hero::playByIndex(int index)
+{
+    m_pAnimation->playByIndex(index);
+    if (m_pMount)
+    {
+        m_pMount->getAnimation()->playByIndex(index);
+    }
+}
+
+void TestArmatureNesting2::onEnter()
+{
+    ArmatureTestLayer::onEnter();
+    setTouchEnabled(true);
+
+    touchedMenu = false;
+
+    CCLabelTTF* label = CCLabelTTF::create("Change Mount", "Arial", 20);
+    CCMenuItemLabel* pMenuItem = CCMenuItemLabel::create(label, this, menu_selector(TestArmatureNesting2::ChangeMountCallback));
+
+    CCMenu* pMenu =CCMenu::create(pMenuItem, NULL);
+
+    pMenu->setPosition( CCPointZero );
+    pMenuItem->setPosition( ccp( VisibleRect::right().x - 67, VisibleRect::bottom().y + 50) );
+
+    addChild(pMenu, 2);
+
+    //Create a hero
+    hero = Hero::create("hero");
+    hero->setLayer(this);
+    hero->playByIndex(0);
+    hero->setPosition(ccp(VisibleRect::left().x + 20, VisibleRect::left().y));
+    addChild(hero);
+
+    //Create 3 mount
+    horse = createMount("horse", VisibleRect::center());
+
+    horse2 = createMount("horse", ccp(120, 200));
+    horse2->setOpacity(200);
+    
+    bear = createMount("bear", ccp(300,70));
+}
+void TestArmatureNesting2::onExit()
+{
+    CCDirector::sharedDirector()->getTouchDispatcher()->removeDelegate(this);
+    ArmatureTestLayer::onExit();
+}
+std::string TestArmatureNesting2::title()
+{
+    return "Test CCArmature Nesting 2";
+}
+std::string TestArmatureNesting2::subtitle()
+{
+    return "Move to a mount and press the ChangeMount Button.";
+}
+bool TestArmatureNesting2::ccTouchBegan(CCTouch *pTouch, CCEvent *pEvent)
+{
+    CCPoint point = pTouch->getLocation();
+
+    CCArmature *armature = hero->getMount() == NULL ? hero : hero->getMount(); 
+
+    //Set armature direction
+    if (point.x < armature->getPositionX())
+    {
+        armature->setScaleX(-1);
+    }
+    else
+    {
+        armature->setScaleX(1);
+    }
+
+    CCActionInterval *move = CCMoveTo::create(2, point);
+    armature->stopAllActions();
+    armature->runAction(CCSequence::create(move,  CCCallFunc::create(this, NULL), NULL));
+
+    return false;
+}
+void TestArmatureNesting2::registerWithTouchDispatcher()
+{
+    CCDirector::sharedDirector()->getTouchDispatcher()->addTargetedDelegate(this, kCCMenuHandlerPriority + 1, true);
+}
+
+void TestArmatureNesting2::ChangeMountCallback(CCObject* pSender)
+{
+    hero->stopAllActions();
+
+    if (hero->getMount())
+    {
+        hero->changeMount(NULL);
+    }
+    else
+    {
+        if (ccpDistance(hero->getPosition(), horse->getPosition()) < 20)
+        {
+            hero->changeMount(horse);
+        }
+        else if (ccpDistance(hero->getPosition(), horse2->getPosition()) < 20)
+        {
+            hero->changeMount(horse2);
+        }
+        else if (ccpDistance(hero->getPosition(), bear->getPosition()) < 30)
+        {
+            hero->changeMount(bear);
+        }
+    }
+}
+
+CCArmature * TestArmatureNesting2::createMount(const char *name, CCPoint position)
+{
+    CCArmature *armature = CCArmature::create(name);
+    armature->getAnimation()->playByIndex(0);
+    armature->setPosition(position);
+    addChild(armature);
+
+    return armature;
+}
+

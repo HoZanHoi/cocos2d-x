@@ -28,7 +28,7 @@
 #include "cocos2d.h"
 #include "ExtensionMacros.h"
 #include "../Layouts/UILayoutDefine.h"
-#include "../Layouts/LayoutParameter.h"
+#include "../Layouts/UILayoutParameter.h"
 NS_CC_EXT_BEGIN
 
 
@@ -271,12 +271,7 @@ public:
      * Removes all children from the container, and do a cleanup to all running actions depending on the cleanup parameter.
      */
     virtual void removeAllChildren();
-    
-    /**
-     * Unschedules the "update" method.
-     */
-    void disableUpdate();
-    
+        
     /**
      * Reorders a child according to a new z value.
      *
@@ -820,15 +815,21 @@ public:
      * @see LayoutParameter
      *
      * @param LayoutParameter pointer
+     *
+     * @param type  Relative or Linear
      */
-    void setLayoutParameter(LayoutParameter* parameter);
+    void setLayoutParameter(UILayoutParameter* parameter);
     
     /**
      * Gets LayoutParameter of widget.
      *
      * @see LayoutParameter
+     *
+     * @param type  Relative or Linear
+     *
+     * @return LayoutParameter
      */
-    LayoutParameter* getLayoutParameter();
+    UILayoutParameter* getLayoutParameter(LayoutParameterType type);
     
     /**
      * Ignore the widget size
@@ -887,8 +888,31 @@ public:
      */
     virtual const char* getDescription() const;
     
+    UIWidget* clone();
+
     virtual void onEnter();
     virtual void onExit();
+    
+    /**
+     * Returns a user assigned CCObject
+     *
+     * Similar to userData, but instead of holding a void* it holds an object
+     *
+     * @return A user assigned CCObject
+     * @js NA
+     */
+    virtual CCObject* getUserObject();
+    /**
+     * Returns a user assigned CCObject
+     *
+     * Similar to UserData, but instead of holding a void* it holds an object.
+     * The UserObject will be retained once in this method,
+     * and the previous UserObject (if existed) will be relese.
+     * The UserObject will be released in CCNode's destructure.
+     *
+     * @param A user assigned CCObject
+     */
+    virtual void setUserObject(CCObject *pUserObject);
     
     /*******Compatible*******/
     /**
@@ -958,7 +982,6 @@ public:
     void setWidgetTag(int tag){setTag(tag);};
     int getWidgetTag(){return getTag();};
     void addCCNode(CCNode* node){addRenderer(node, 0);};
-    void removeCCNode(bool cleanup){removeCCNode(cleanup);};
     void addPushDownEvent(CCObject* target,SEL_PushEvent selector)
     {
         m_pPushListener = target;
@@ -987,6 +1010,7 @@ public:
     /*temp action*/
     void setActionTag(int tag);
 	int getActionTag();
+    void updateSizeAndPosition();
 protected:
     //call back function called when size changed.
     virtual void onSizeChanged();
@@ -1011,13 +1035,10 @@ protected:
     void cancelUpEvent();
     void longClickEvent();
     void updateAnchorPoint();
-    /**
-     * Release texture resoures of widget.
-     * Release renderer.
-     * If you override releaseResoures, you shall call its parent's one, e.g. UIWidget::releaseResoures().
-     */
-    virtual void releaseResoures();
-    void updateSizeAndPosition();
+    void copyProperties(UIWidget* model);
+    virtual UIWidget* createCloneInstance();
+    virtual void copySpecialProperties(UIWidget* model);
+    virtual void copyClonedWidgetChildren(UIWidget* model);
 protected:
     bool m_bEnabled;            ///< Highest control of widget
     bool m_bVisible;            ///< is this widget visible
@@ -1046,7 +1067,7 @@ protected:
 	int m_nActionTag;
     CCSize m_size;
     CCSize m_customSize;
-    LayoutParameter* m_pLayoutParameter;
+    CCDictionary* m_pLayoutParameterDictionary;
     bool m_bIgnoreSize;
     CCArray* m_children;
     bool m_bAffectByClipping;
@@ -1058,6 +1079,7 @@ protected:
     PositionType m_ePositionType;
     CCPoint m_positionPercent;
     bool m_bIsRunning;
+    CCObject* m_pUserObject;
     
     /*Compatible*/
     CCObject*       m_pPushListener;
